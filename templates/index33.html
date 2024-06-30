@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/notifications.css">
+    <link href="/static/bootoast.min.css" rel="stylesheet" type="text/css">
+    <link href="/static/bootoast.min.js" rel="stylesheet" type="text/css">
+    <title>Insights and Forecasts: Data Analysis Project</title>
+    <script src="//code.jquery.com/jquery.min.js"></script>
+    <script src="/static/bootoast.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+    /* Add this in your styles.css file or in a <style> block in your HTML */
+.header {
+    display: flex;
+    align-items: center;
+     /* Adjust as needed */
+}
+
+.logo {
+    width: 449px; /* Adjust the width of the logo as needed */
+    height: auto;
+    margin-right: 128px; /* Adjust the margin as needed */
+   
+}
+
+.title-rectangle {
+    background-color: #77003A; /* Adjust the background color as needed */
+    padding: 10px;
+    flex-grow: 1;
+}
+body {
+            background-color: #f0f0f0; /* Light gray background color */
+        }
+.myDiv {
+  background-color: #E5DBE0;
+  text-align: center;
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px;
+}
+.text-center{
+    color: #77003A;
+
+}
+
+</style>
+</head>
+<body>
+    <!-- Add this inside the <div class="container mt-5"> -->
+<div class="header">
+    
+    <div class="title-rectangle">
+       <center><img src="/static/hcplogo.png" alt="Logo" class="logo"></center> 
+    </div>
+</div>
+
+    <div class="myDiv">
+      <h2 class="text-center">Insights and Forecasts: Data Analysis Project</h2>
+    </div>
+    <div class="container mt-5">
+        
+    <div id="message"></div>
+    <form action="/" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="input_type">Select input type:</label><br>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" id="type_keywords" name="input_type" value="type" checked>
+                <label class="form-check-label" for="type_keywords">Type keywords</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" id="upload_file" name="input_type" value="upload">
+                <label class="form-check-label" for="upload_file">Upload a file</label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="region_input">Select region:</label>
+            <select class="form-control" id="region_input" name="region">
+                <option value="MA">Maroc</option>
+                <option value="US">United States</option>
+                <option value="GB">United Kingdom</option>
+                <option value="CA">Canada</option>
+				 <option value="CA">UAE</option>
+                <!-- Add more regions here... -->
+            </select>
+        </div>
+
+        <div class="form-group" id="type_input">
+            <label for="keyword_input">Type keywords (comma-separated):</label>
+            <input type="text" class="form-control" id="keyword_input" name="keywords">
+        </div>
+
+        <div class="form-group" id="upload_input" style="display: none;">
+            <label for="file_input">Upload a file:</label>
+            <input type="file" class="form-control-file" id="file_input" name="file_input">
+        </div>
+
+        <div class="form-group">
+            <label for="start_date">Start Date:</label>
+            <input type="date" class="form-control" id="start_date" name="start_date"  max="2023-01-01" min="2015-01-01">
+        </div>
+
+        <div class="form-group">
+            <label for="end_date">End Date:</label>
+            <input type="date" class="form-control" id="end_date" name="end_date"  max="2023-01-01" min="2015-01-01">
+        </div>
+
+        <div class="form-group">
+            <button class="btn btn-primary" type="button" disabled style="display: none;" id="loading_button">Generating
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              </button>
+            <button type="submit" class="btn btn-primary" id="generate_button" disabled >Generate Graph</button>
+            <button type="button" class="btn btn-secondary" id="clear_button" onclick="clearGraph()">Clear Graph</button>
+            <button type="button" class="btn btn-success" id="download_button" disabled>Download CSV</button>
+        </div>
+    </form>
+    
+    <div id="graph_container">
+        <div id="plotly-figure" style="display: none;"></div>
+        <div id="plotly-pca"    style="display: none;"></div>
+        <div id="plotly-arima"  style="display: none;"></div>
+       
+    </div>
+    <div id="overlay" style="display: block;"></div>
+    <div id="loading_spinner" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+    <form action="/download-csv" method="post" id="download-form" style="display: none;">
+        <input type="hidden" name="download_csv" value="true">
+    </form>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {    
+            const typeKeywordsRadio = document.getElementById('type_keywords');
+            const uploadFileRadio = document.getElementById('upload_file');
+            const typeInput = document.getElementById('type_input');
+            const uploadInput = document.getElementById('upload_input');
+            const downloadButton = document.getElementById('download_button');
+            const clear_button = document.getElementById('clear_button');
+            const downloadForm = document.getElementById('download-form');
+            const graphContainer = document.getElementById('graph_container');
+            const generateButton = document.getElementById('generate_button');
+            const keywordInput = document.getElementById('keyword_input');
+            const fileInput = document.getElementById('file_input');
+            const loadingSpinner = document.getElementById("loading_spinner");
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = (today.getMonth() + 1).toString().padStart(2, '0'); // Months are zero-indexed
+            const day = today.getDate().toString().padStart(2, '0');
+            const today_date = `${year}-${month}-${day}`; 
+            const startDateInput = document.getElementById('start_date');
+            const endDateInput = document.getElementById('end_date');
+           // startDateInput.setAttribute('max', today_date);
+           // endDateInput.setAttribute('max', today_date);
+   
+
+function handleDateInputChange() {
+  const startDate = new Date(startDateInput.value);
+  const endDate = new Date(endDateInput.value);
+
+  const currentYear = new Date().getFullYear();
+
+  if (endDate < startDate || endDate.getFullYear() > currentYear || startDate.getFullYear() < 2015) {
+    bootoast.toast({
+                message: 'Please select valid dates.',
+                type: 'danger',
+                // top-center, top-left, top-right
+                // bottom-center, bottom-left, bottom-right
+                position: 'top-center'
+                });
+                return 1;
+  }
+  else return 0;
+}
+            
+            // Disable the download button initially
+            downloadButton.setAttribute('disabled', 'disabled');
+            disableClearButton();
+            downloadButton.addEventListener('click', function() {
+                downloadForm.submit();
+            });
+            clear_button.addEventListener('click', function() {
+                clearGraph();
+            });
+            typeKeywordsRadio.addEventListener('change', function() {
+                typeInput.style.display = 'block';
+                uploadInput.style.display = 'none';
+                keywordInput.value = ''; // Clear typed keywords
+                fileInput.value=null; 
+                disableGenerateButton();
+                //clearGraph();  // Clear graph and disable download button
+            });
+    
+            uploadFileRadio.addEventListener('change', function() {
+                typeInput.style.display = 'none';
+                uploadInput.style.display = 'block';
+                keywordInput.value = ''; // Clear typed keywords
+                disableGenerateButton();
+               // clearGraph();  // Clear graph and disable download button
+            });
+
+            // Enable/disable the "Generate Graph" button based on keyword input
+            keywordInput.addEventListener('input', function() {
+                if (keywordInput.value.trim() !== "") {
+                    generateButton.removeAttribute('disabled');
+                } else {
+                    generateButton.setAttribute('disabled', 'disabled');
+                    
+                }
+            });
+
+            // Enable/disable the "Generate Graph" button based on file input
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files.length > 0) {
+                    generateButton.removeAttribute('disabled');
+                } else {
+                    generateButton.setAttribute('disabled', 'disabled');
+                }
+            });
+
+            function enableDownloadButton() {
+                downloadButton.removeAttribute('disabled');
+            }
+            function enableClearButton() {
+                clear_button.removeAttribute('disabled');
+            }
+            function disableClearButton() {
+                clear_button.setAttribute('disabled', 'disabled');
+            }
+            function enableGenerateButton() {
+                generateButton.removeAttribute('disabled');
+            }
+            function disableGenerateButton() {
+                generateButton.setAttribute('disabled', 'disabled');
+            }
+            function disableDownloadButton() {
+                downloadButton.setAttribute('disabled', 'disabled');
+            }
+        
+            function clearGraph() {
+                //graphContainer.innerHTML = '<p>No graph available.</p>';
+                graphContainer.style.display='none';
+                disableDownloadButton();
+                disableClearButton();
+            }
+
+            
+            function showLoadingSpinner() {
+        loadingSpinner.style.display = "block";
+        const overlay=document.getElementById('overlay');
+        overlay.style.display = "block";
+    }
+
+    // Function to hide the loading spinner
+    function hideLoadingSpinner() {
+        loadingSpinner.style.display = "none";
+       
+    }
+
+           
+    
+        generateButton.addEventListener('click', function() {
+            console.log(startDateInput.value)
+            var test=handleDateInputChange();
+            if(test==1){
+
+            }
+            else{
+               
+                getMessage();
+                setInterval(getMessage, 1000);
+                console.log("test14")
+            graphContainer.style.display='none';
+        //showLoadingSpinner(); // Show the loading spinner when generating
+            generateButton.style.display='none';
+            document.getElementById('loading_button').style.display='inline-block';
+            disableDownloadButton();
+            disableClearButton();
+            }
+         });
+            // Use Plotly.newPlot to render the plot in the specified container
+        
+        const error_graphs = '{{ error_message }}';
+        if(error_graphs){
+            console.log(error_graphs.toString());
+       
+         bootoast.toast({
+                    message: error_graphs.toString(),
+                type: 'danger',
+                // top-center, top-left, top-right
+                // bottom-center, bottom-left, bottom-right
+                position: 'top-center'
+                });
+
+        }
+        var graphJson = '{{ graph_json |safe }}';
+
+       
+        var graphJson_pca = '{{ plotly_PCA |safe }}';   
+       
+        var graphJson_arima = '{{ plotly_arima |safe }}';   
+        
+        const plot_fig =document.getElementById("plotly-figure")
+        const plot_pca =document.getElementById("plotly-pca")
+        const plot_arima =document.getElementById("plotly-arima")
+        const error = '{{error}}'; 
+        const message='{{message}}'
+        //console.log(message)
+  
+        if(error){
+            const message = '{{message}}'; 
+            const msg_type = '{{msg_type}}'; 
+            console.log("true")
+        }
+        var old_message="None";
+        
+        function getMessage() {
+            
+            console.log("oldmessage: "+old_message);
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/message', true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        console.log(response.message)
+                        if(response.message && response.message !== old_message){
+                            old_message=response.message;  
+                            bootoast.toast({
+                    message: response.message,
+                type: response.msg_type,
+                // top-center, top-left, top-right
+                // bottom-center, bottom-left, bottom-right
+                position: 'top-center'
+                });
+
+                        }
+                        return response.message;
+                        
+                    } else {
+                        //return "None";
+                    }
+                    
+                }
+            };
+            xhr.send();
+        }
+
+       
+        
+        
+        if(graphJson!="None"){
+            var figure = JSON.parse(graphJson);
+                Plotly.newPlot('plotly-figure', figure.data, figure.layout);
+                plot_fig.style="block";
+                generateButton.style.display='inline-block';
+                document.getElementById('loading_button').style.display='none';
+                enableDownloadButton();
+                enableClearButton();
+                
+            }
+          // console.log() 
+        
+        if(graphJson_pca!="None"){
+        var figure_pca = JSON.parse(graphJson_pca);
+        Plotly.newPlot('plotly-pca', figure_pca.data, figure_pca.layout);
+                plot_pca.style="block";
+            }
+        if(graphJson_arima!="None"){
+            var figure_arima = JSON.parse(graphJson_arima);
+            Plotly.newPlot('plotly-arima', figure_arima.data, figure_arima.layout);
+                plot_arima.style="block";
+            }
+         
+        
+        
+       
+        
+
+
+
+       
+
+    
+});
+    </script>
+</body>
+</html>
